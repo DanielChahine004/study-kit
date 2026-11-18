@@ -39,7 +39,8 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 
-from studykit.sources import FACTS_MODULE, ROOT  # noqa: E402
+from studykit.sources import PAPERS, ROOT  # noqa: E402
+from studykit.config import paper_dir as P  # noqa: E402  a writeup's folder from its name
 
 LEFT_OUT = {"draft.tex", "sources.tex"}       # at the paper's root; Overleaf never sees them
 SYNC = "report/overleaf-sync.json"
@@ -48,7 +49,7 @@ TRAILER = "Repository-Commit"
 
 def remote(paper):
     """overleaf for the first paper, overleaf2 for the second, ..."""
-    i = list(FACTS_MODULE).index(paper)
+    i = PAPERS.index(paper)
     return "overleaf" if i == 0 else f"overleaf{i + 1}"
 
 
@@ -277,15 +278,15 @@ def blob(spec, root=ROOT):
 
 
 def markup_at(rev, paper, root=ROOT):
-    main = (blob(f"{rev}:{paper}/main.tex", root) or b"").decode()
-    return Markup((blob(f"{rev}:{paper}/sources.tex", root) or b"").decode(), bool(NATBIB.search(main)))
+    main = (blob(f"{rev}:{P(paper)}/main.tex", root) or b"").decode()
+    return Markup((blob(f"{rev}:{P(paper)}/sources.tex", root) or b"").decode(), bool(NATBIB.search(main)))
 
 
 def plain_tree(rev, paper, root=ROOT):
     """The tree Overleaf gets for the paper as it is at rev."""
     mk = markup_at(rev, paper, root)
     entries = []
-    for path, (mode, sha) in sorted(files(f"{rev}:{paper}", root).items()):
+    for path, (mode, sha) in sorted(files(f"{rev}:{P(paper)}", root).items()):
         if path in LEFT_OUT:
             continue
         if path.endswith(".tex"):
@@ -308,8 +309,8 @@ def last_push(paper, rem, root=ROOT):
             if m:
                 return h, m[1]
     # pushed before this script: the project held exactly a commit's paper folder
-    commits = out("log", "--format=%H", "-n", "500", "HEAD", "--", paper, root=root).split()
-    trees = out("rev-parse", *[f"{h}:{paper}" for h in commits], root=root).split() if commits else []
+    commits = out("log", "--format=%H", "-n", "500", "HEAD", "--", P(paper), root=root).split()
+    trees = out("rev-parse", *[f"{h}:{P(paper)}" for h in commits], root=root).split() if commits else []
     by_tree = {}
     for h, t in zip(commits, trees):
         by_tree.setdefault(t, h)
@@ -336,8 +337,8 @@ def push(paper, rem=None, root=ROOT, adopt=False):
     if pushed is not None and tip != pushed and synced(root, "HEAD").get(paper) != tip:
         n = out("rev-list", "--count", f"{pushed}..{tip}", root=root)
         raise SystemExit(f"{rem} has {n} commit(s) of edits since the last push: pull them first")
-    if out("status", "--porcelain", "--", paper, root=root):
-        print(f"note: uncommitted changes in {paper}/ are not pushed; this pushes HEAD")
+    if out("status", "--porcelain", "--", P(paper), root=root):
+        print(f"note: uncommitted changes in {P(paper)}/ are not pushed; this pushes HEAD")
     head = out("rev-parse", "HEAD", root=root)
     tree = plain_tree(head, paper, root)
     if tree == out("rev-parse", f"{tip}^{{tree}}", root=root):
@@ -384,42 +385,42 @@ def pull(paper, rem=None, root=ROOT, accept=False):
         b, t = base.get(path), theirs.get(path)
         if b == t:
             continue
-        dest = root / paper / path
+        dest = root / P(paper) / path
         ours = dest.read_bytes() if dest.exists() else None
-        marked = blob(f"{made}:{paper}/{path}", root)
+        marked = blob(f"{made}:{P(paper)}/{path}", root)
         if t is None:
             if ours == marked or ours is None:
                 plan[path] = None
             else:
-                conflicts.append(f"{paper}/{path}: deleted in Overleaf, changed here (kept)")
+                conflicts.append(f"{P(paper)}/{path}: deleted in Overleaf, changed here (kept)")
             continue
         new = blob(t[1], root)
         if path.endswith(".tex") and marked is not None:
             plain, spans = mk.flatten(marked.decode())
             text, l, g = unflatten(plain, spans, new.decode())
             lines = new.decode().splitlines()
-            lost += [f"{paper}/{path}:{n}  {what} -> Overleaf reads: {lines[n - 1].strip() if n <= len(lines) else ''}"
+            lost += [f"{P(paper)}/{path}:{n}  {what} -> Overleaf reads: {lines[n - 1].strip() if n <= len(lines) else ''}"
                      for what, n in l]
-            gone += [f"{paper}/{path}: {what}" for what in g]
+            gone += [f"{P(paper)}/{path}: {what}" for what in g]
             new = text.encode()
         if ours == marked:
             plan[path] = new
         elif ours == new:
             continue
         elif ours is None or marked is None or b"\0" in ours + new:
-            conflicts.append(f"{paper}/{path}: changed here and in Overleaf (kept this repository's)")
+            conflicts.append(f"{P(paper)}/{path}: changed here and in Overleaf (kept this repository's)")
         else:
             merged, n = merge_file(ours, marked, new)
             plan[path] = merged
             if n:
-                conflicts.append(f"{paper}/{path}: {n} conflict(s), marked in the file")
+                conflicts.append(f"{P(paper)}/{path}: {n} conflict(s), marked in the file")
     if lost and not accept:
         print(f"{paper}: Overleaf edits that change what the study prints; nothing was written.")
         print("Undo each in Overleaf and pull again, or pull with --accept to take the text as written:")
         print("\n".join("  " + x for x in lost))
         return 1
     for path, data in plan.items():
-        dest = root / paper / path
+        dest = root / P(paper) / path
         if data is None:
             dest.unlink(missing_ok=True)
         else:
@@ -435,9 +436,9 @@ def pull(paper, rem=None, root=ROOT, accept=False):
         print(f"accepted as written: {x}")
     if conflicts:
         print("\n".join(conflicts))
-        print(f"Resolve, then commit {paper}/ and {SYNC}.")
+        print(f"Resolve, then commit {P(paper)}/ and {SYNC}.")
         return 1
-    paths = [f"{paper}/{p}" for p in plan] + [SYNC]
+    paths = [f"{P(paper)}/{p}" for p in plan] + [SYNC]
     git("add", "-A", "--", *paths, root=root)
     git("commit", "-q", "-m", f"Pull {paper} edits from Overleaf ({tip[:7]})", "--", *paths, root=root)
     print(f"{paper}: pulled {len(plan)} file(s) from {rem}, committed")
@@ -449,7 +450,7 @@ def main(argv):
     if not args or args[0] not in ("push", "pull"):
         print(__doc__)
         return 2
-    paper = args[1] if len(args) > 1 else next(iter(FACTS_MODULE))
+    paper = args[1] if len(args) > 1 else next(iter(PAPERS))
     if args[0] == "push":
         return push(paper, adopt="--adopt" in argv)
     return pull(paper, accept="--accept" in argv)

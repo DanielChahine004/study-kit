@@ -40,7 +40,7 @@ _logs = {}
 
 def tex_files(paper):
     """{name: text, comments stripped} for main.tex and every section it inputs."""
-    d = ROOT / paper
+    d = ROOT / config.paper_dir(paper, _CFG)
     main = (d / "main.tex").read_text()
     out = {"main.tex": main, **{f"sections/{m}.tex": (d / "sections" / f"{m}.tex").read_text()
                                 for m in re.findall(r"\\input\{sections/([^}]+)\}", main)}}
@@ -57,12 +57,12 @@ def plain(tex):
 
 
 def abstract(paper):
-    m = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", (ROOT / paper / "main.tex").read_text(), re.S)
+    m = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", (ROOT / config.paper_dir(paper, _CFG) / "main.tex").read_text(), re.S)
     return m.group(1) if m else ""
 
 
 def introduction(paper):
-    return next((f.read_text() for f in sorted((ROOT / paper / "sections").glob("*.tex"))
+    return next((f.read_text() for f in sorted((ROOT / config.paper_dir(paper, _CFG)).glob("*/*.tex"))
                  if re.search(r"\\section\{Introduction\}", f.read_text())), "")
 
 
@@ -72,7 +72,7 @@ def built(paper):
         if not TECTONIC.exists():
             pytest.skip("no paper environment here (pixi install -e paper)")
         out = Path(tempfile.mkdtemp())
-        subprocess.run([str(TECTONIC), "--keep-logs", "--outdir", str(out), str(ROOT / paper / "main.tex")],
+        subprocess.run([str(TECTONIC), "--keep-logs", "--outdir", str(out), str(ROOT / config.paper_dir(paper, _CFG) / "main.tex")],
                        check=True, capture_output=True)
         _logs[paper] = (out / "main.log").read_text(errors="replace")
     return _logs[paper]
@@ -87,7 +87,7 @@ def referred(texts):
 @pytest.mark.parametrize("paper", [p for p in PAPERS if "facts" in _CFG["papers"][p]], **_ids)
 def test_sources_are_current(paper):
     from studykit import sources as S
-    assert (ROOT / paper / "sources.tex").read_text() == S.render_tex(paper, S.facts(paper)), \
+    assert (ROOT / config.paper_dir(paper, _CFG) / "sources.tex").read_text() == S.render_tex(paper, S.facts(paper)), \
         f"{paper}/sources.tex is stale: run step3_outputs/sources.py {paper}"
 
 
@@ -105,7 +105,7 @@ def test_every_fact_and_claim_holds(paper):
 @pytest.mark.parametrize("paper", PAPERS, **_ids)
 def test_floats_stay_before_the_references(paper):
     """placeins keeps floats in their section and a FloatBarrier flushes them before the bibliography."""
-    main = (ROOT / paper / "main.tex").read_text()
+    main = (ROOT / config.paper_dir(paper, _CFG) / "main.tex").read_text()
     assert re.search(r"\\usepackage\[[^]]*section[^]]*\]\{placeins\}", main), f"{paper}/main.tex lacks \\usepackage[section]{{placeins}}"
     bib = main.index("\\bibliography{")
     assert "\\FloatBarrier" in main[:bib], f"{paper}/main.tex needs \\FloatBarrier before \\bibliography"
@@ -130,7 +130,7 @@ def test_every_appendix_is_reached_from_the_main_text(paper):
 # --- figures ---------------------------------------------------------------------------
 
 def _text_width_in(paper):
-    m = re.search(r"\\usepackage\[margin=([\d.]+)cm\]\{geometry\}", (ROOT / paper / "main.tex").read_text())
+    m = re.search(r"\\usepackage\[margin=([\d.]+)cm\]\{geometry\}", (ROOT / config.paper_dir(paper, _CFG) / "main.tex").read_text())
     assert m, f"{paper}: no a4 margin=...cm geometry to take the text width from"
     return 210 / 25.4 - 2 * float(m.group(1)) / 2.54
 
@@ -139,7 +139,7 @@ def _printed(paper):
     tex = "".join(tex_files(paper).values())
     for opt, name in re.findall(r"\\(?:studyfig|includegraphics)(?:\[([^\]]*)\])?\{([^}#]+)\}", tex):
         w = re.search(r"([\d.]*)\\(?:linewidth|textwidth)", opt or "")
-        yield (ROOT / paper / "figures" / (name if Path(name).suffix else name + ".pdf"),
+        yield (ROOT / config.paper_dir(paper, _CFG) / "figures" / (name if Path(name).suffix else name + ".pdf"),
                float(w.group(1) or 1) if w else 1.0)
 
 
@@ -159,7 +159,7 @@ def test_figures_are_vector_pdf_in_the_papers_faces_at_print_size(paper):
         faces = {n.decode().split("+")[-1] for n in re.findall(rb"/BaseFont /([\w+-]+)", pdf)}
         stray = sorted(n for n in faces if not FACES.match(n))
         assert not stray, f"{rel}: letters in {stray}; use studykit.figures"
-    for f in (ROOT / paper / "figures").glob("[!.]*"):
+    for f in (ROOT / config.paper_dir(paper, _CFG) / "figures").glob("[!.]*"):
         assert f.suffix == ".pdf", f"{f.relative_to(ROOT)}: figures are vector PDF"
 
 
@@ -211,8 +211,8 @@ def test_abbreviations_spelled_out_at_first_use(paper):
 def test_units_joined_by_a_thin_space(paper):
     """511\\,keV, not 511 keV or 511keV: the thin space keeps a number and its unit on one line."""
     bad = []
-    body = (ROOT / paper / "main.tex").read_text().split("\\begin{document}")[-1]
-    for name, tex in [("main.tex", body), *((f.name, f.read_text()) for f in sorted((ROOT / paper / "sections").glob("*.tex")))]:
+    body = (ROOT / config.paper_dir(paper, _CFG) / "main.tex").read_text().split("\\begin{document}")[-1]
+    for name, tex in [("main.tex", body), *((f.name, f.read_text()) for f in sorted((ROOT / config.paper_dir(paper, _CFG) / "sections").glob("*.tex")))]:
         for i, line in enumerate(tex.split("\n"), 1):
             line = re.sub(r"(?<!\\)%.*", "", line)
             line = re.sub(r"\\(?:fact|cite[a-z]*|claim\*?|ref|label)\*?\{[^}]*\}", "0", line)   # names, not numbers

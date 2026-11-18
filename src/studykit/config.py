@@ -1,7 +1,8 @@
 """A repository's study-kit settings: kit.toml at its root.
 
-    [papers.paper1]                       # one table per paper folder
-    facts = "step3_outputs.facts1"        # its facts module (studykit.sources)
+    [papers.paper1]                       # one table per writeup, by name
+    facts = "step3_outputs.facts1"        # its facts module (studykit.sources); none for claims only
+    dir = "paper1"                        # its folder, if not the name (a thesis: "src/thesis")
     pages = 28                            # venue limits, if any (studykit.testing)
     abstract_words = 300
 
@@ -43,3 +44,9 @@ def load(start=None):
 def facts_modules(cfg=None):
     cfg = cfg or load()
     return {p: v["facts"] for p, v in cfg["papers"].items() if "facts" in v}
+
+
+def paper_dir(name, cfg=None):
+    """The writeup's folder, relative to the root: its `dir`, else its name."""
+    cfg = cfg or load()
+    return cfg["papers"].get(name, {}).get("dir", name)
