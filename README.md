@@ -22,10 +22,11 @@ repositories and the thesis hold the same rules and checks:
 ```toml
 # pixi.toml
 [pypi-dependencies]
-study-kit = { git = "https://github.com/DanielChahine004/study-kit.git", tag = "v1.0.0" }
+study-kit = { git = "https://github.com/DanielChahine004/study-kit.git", tag = "v1.2.0" }
 
 [tasks]
 kit-update = "python -m studykit bump && pixi install && pixi run python -m studykit rules"
+test = "python -m studykit sync && pytest -q"
 ```
 
 ```toml
@@ -43,8 +44,14 @@ names = ["GATE"]          # named, not abbreviated
 from studykit.testing import *  # noqa: F401,F403
 ```
 
-The version is pinned, so a change here reaches a repository only when it runs
-`pixi run kit-update`; every test run's header says when a newer release is out.
+The version is pinned, and `pixi run test` moves it: `studykit sync` runs first,
+and when a newer release is out (checked at most once a day) it bumps the pin,
+installs, refreshes the rules copy and says to commit `pixi.toml`, `pixi.lock`
+and the copy, so the tests then run against the new kit. It never fails a run,
+and does nothing offline, in CI (`CI` set), or with `STUDYKIT_NO_UPDATE=1`.
+Leave it out of a release or submission check, which should test the pinned
+kit as it is. `pixi run kit-update` does the same by hand, and every test run's
+header says which version it tested against.
 A repository relaxes a check in `kit.toml`, never by editing the kit.
 
 ## Releasing
