@@ -1,6 +1,6 @@
 [project]
 name = "study-kit"
-version = "1.2.0"
+version = "1.2.1"
 description = "What every writeup shares: writing rules, figure style and checks, sources checker, Overleaf sync, and their tests"
 requires-python = ">=3.11"
 dependencies = ["matplotlib>=3.7", "numpy", "pytest"]

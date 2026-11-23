@@ -2,9 +2,9 @@
 python -m studykit rules      copy the installed kit's core rules to kit.toml's [rules] copy
 python -m studykit bump       pin pixi.toml to the newest release (then pixi install; `pixi run
                               kit-update` does all three)
-python -m studykit sync       before the tests: move to a newer release if one is out (checked at most
-                              once a day); never fails, and does nothing offline, in CI, or with
-                              STUDYKIT_NO_UPDATE=1"""
+python -m studykit sync       before the tests: move to a newer release if one is out (asks GitHub
+                              every run, under a second); never fails, and does nothing offline, in CI,
+                              or with STUDYKIT_NO_UPDATE=1"""
 import json
 import os
 import re
@@ -28,7 +28,7 @@ def latest(max_age=86400):
         pass
     try:
         out = subprocess.run(["git", "ls-remote", "--tags", "--refs", REPO + ".git"], capture_output=True,
-                             text=True, timeout=5).stdout
+                             text=True, timeout=3).stdout
     except Exception:
         return None
     tags = sorted(re.findall(r"refs/tags/v(\d+)\.(\d+)\.(\d+)", out), key=lambda v: tuple(map(int, v)))
@@ -78,7 +78,7 @@ def sync():
     The rules are copied by a fresh interpreter, which loads the newly installed kit."""
     if os.environ.get("STUDYKIT_NO_UPDATE") or os.environ.get("CI"):
         return
-    new = latest()
+    new = latest(max_age=0)
     if not newer(new):
         return
     try:

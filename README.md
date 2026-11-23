@@ -45,10 +45,10 @@ from studykit.testing import *  # noqa: F401,F403
 ```
 
 The version is pinned, and `pixi run test` moves it: `studykit sync` runs first,
-and when a newer release is out (checked at most once a day) it bumps the pin,
+and when a newer release is out (it asks GitHub on every run, under a second) it bumps the pin,
 installs, refreshes the rules copy and says to commit `pixi.toml`, `pixi.lock`
-and the copy, so the tests then run against the new kit. It never fails a run,
-and does nothing offline, in CI (`CI` set), or with `STUDYKIT_NO_UPDATE=1`.
+and the copy, so the tests then run against the new kit. It never fails a run
+(offline it gives up after 3 s), and does nothing in CI (`CI` set), or with `STUDYKIT_NO_UPDATE=1`.
 Leave it out of a release or submission check, which should test the pinned
 kit as it is. `pixi run kit-update` does the same by hand, and every test run's
 header says which version it tested against.
