@@ -24,3 +24,15 @@ def test_a_legend_over_the_data_is_refused():
     ax.legend(loc="center")
     with pytest.raises(AssertionError, match="legend covers"):
         legends_clear(fig)
+
+
+def test_a_legend_past_the_top_is_refused():
+    """The reflector figure of the optics paper: a figure legend anchored above the panels, cropped in the PDF."""
+    from studykit.figures import lettering_inside
+    fig, axs = plt.subplots(1, 2, figsize=(6.2, 1.9))
+    for ax in axs:
+        ax.plot([0, 1], [0, 1], label="a long series label")
+    fig.legend(*axs[0].get_legend_handles_labels(), loc="upper center", bbox_to_anchor=(0.5, 1.08))
+    fig.tight_layout()
+    with pytest.raises(AssertionError, match="cropped"):
+        lettering_inside(fig)

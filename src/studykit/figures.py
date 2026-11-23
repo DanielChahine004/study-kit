@@ -1,6 +1,6 @@
 """Figures that match the writeup: vector PDF, lettered in the papers' faces (Latin Modern
 Roman 8 for text, Computer Modern math), on a transparent background, saved only when no
-legend covers the data and no lettering is below the minimum size.
+legend covers the data, no lettering is below the minimum size and none is cropped at the edge.
 
     from studykit.figures import plt, save     # plt is matplotlib.pyplot with the kit style applied
     fig, ax = plt.subplots(figsize=(6.3, 2.4))  # drawn at the width it prints at
@@ -72,9 +72,22 @@ def text_large_enough(fig, min_pt=None):
     assert not small, f"text below {min_pt} pt: {small[:5]}"
 
 
+def lettering_inside(fig, tol_in=0.01):
+    """Fails if anything drawn, lettering and legends included, reaches past the edge of the figure,
+    where the PDF crops it (a legend anchored above the panels, a suptitle with no room): give it room
+    with fig.tight_layout(rect=...) or a taller figure."""
+    fig.canvas.draw()
+    t, f = fig.get_tightbbox(fig.canvas.get_renderer()), fig.bbox_inches
+    over = {"left": f.x0 - t.x0, "bottom": f.y0 - t.y0, "right": t.x1 - f.x1, "top": t.y1 - f.y1}
+    out = {k: round(v, 2) for k, v in over.items() if v > tol_in}
+    assert not out, f"cropped at the figure edge, by inches: {out}"
+
+
 def save(fig, path, **kw):
     """Every figure is saved through here: legend and text-size checks, then a PDF with no
     creation timestamp, so an unchanged figure is byte-identical on rerun."""
     legends_clear(fig)
     text_large_enough(fig)
+    if kw.get("bbox_inches") != "tight":                     # a tight box grows to fit, so nothing is cropped
+        lettering_inside(fig)
     fig.savefig(path, metadata={"CreationDate": None}, **kw)
