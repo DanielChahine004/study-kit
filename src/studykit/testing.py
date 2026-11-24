@@ -14,6 +14,8 @@ editing the kit.
 - prose:    abbreviations spelled out at first use (S1), units joined by a thin space
 - structure: floats before the references, every figure and table referred to, every appendix reached
 - rules:    the repository's copy of the core writing rules is the kit's
+- references: the generated bibliography is current, cites what the paper cites, and every
+            entry is its DOI's record (where report/references.txt exists)
 """
 import re
 import subprocess
@@ -228,3 +230,85 @@ def test_writing_rules_copy_is_the_kits():
     copy = ROOT / _CFG["rules"]["copy"]
     assert copy.exists() and copy.read_text() == rules.core(), \
         f"{copy.relative_to(ROOT)} is not the kit's core rules: run `pixi run kit-update`"
+
+
+# --- references: report/references.txt -> references.bib (studykit.references) ------------
+
+from studykit import references as R  # noqa: E402
+
+_refs = pytest.mark.skipif(not R.LIST.exists() or R.OUT is None,
+                           reason="no generated bibliography here (report/references.txt)")
+
+
+def _cited():
+    return R.cited("\n".join(tex_files(R.PAPER).values())) if R.PAPER else set()
+
+
+def _main_tex():
+    return (R.OUT.parent / "main.tex").read_text()
+
+
+@_refs
+def test_bibliography_is_current():
+    assert R.OUT.read_text() == R.render(), f"{R.OUT.relative_to(ROOT)} is stale: run `pixi run references`"
+
+
+@_refs
+def test_every_citation_is_in_references_txt():
+    missing = _cited() - {k for k, _, _ in R.entries()}
+    assert not missing, f"cited but not in {R.LIST.relative_to(ROOT)}: {sorted(missing)}"
+
+
+@_refs
+def test_every_doi_is_cached():
+    cache = R.load_cache()
+    assert all(d.lower() in cache for _, d, _ in R.entries() if d), "run `pixi run references --fetch`"
+
+
+@_refs
+def test_every_entry_links():
+    """Each generated entry carries a field its style prints as a link: a doi, or a url where the
+    type prints no doi (misc) or there is no DOI. Only a book or unpublished paper may have neither."""
+    bare = []
+    for kind, key, body in re.findall(r"^@(\w+)\{([^,]+),(.*?)^\}", R.OUT.read_text(), re.S | re.M):
+        has = lambda f: re.search(rf"^\s*{f}\s*=", body, re.M)  # noqa: E731
+        if not (has("url") or has("doi") and kind not in R.PRINT_NO_DOI or kind in R.NO_LINK_TYPES):
+            bare.append(key)
+    assert not bare, f"entries whose reference cannot link (give url=...): {bare}"
+
+
+@_refs
+def test_the_reference_list_prints_dois_as_links():
+    main = _main_tex()
+    style = re.search(r"\\bibliographystyle\{([^}]*)\}", main).group(1)
+    assert style not in R.DROP_DOI, f"{style} drops the doi field, so no reference would link"
+    assert re.search(r"\\newcommand\*?\{\\doi\}.*\\href\{https://doi\.org/", main), \
+        "main.tex does not define \\doi as a link to doi.org, so the DOIs print as text"
+
+
+@_refs
+def test_every_key_matches_its_record():
+    """surname + year + word, against the record: a DOI that resolves to another paper fails."""
+    cache = R.load_cache()
+    bad = [R.key_problem(k, d, o, cache[d.lower()] if d else {}) for k, d, o in R.entries()]
+    bad = [b for b in bad if b]
+    assert not bad, "keys that do not match their DOI's record:\n" + "\n".join(bad)
+
+
+@_refs
+def test_overrides_restyle_but_never_replace():
+    """An override fills a gap or restyles a field; it cannot make the entry name a different work."""
+    cache = R.load_cache()
+    bad = [R.override_problem(k, d, o, cache[d.lower()] if d else {}) for k, d, o in R.entries() if o]
+    bad = [b for b in bad if b]
+    assert not bad, "overrides that change which work is cited:\n" + "\n".join(bad)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("key,doi,over", [e for e in R.entries() if e[1]] if R.LIST.exists() else [], ids=lambda v: v if isinstance(v, str) else "")
+@_refs
+def test_live_record_renders_as_cached(key, doi, over):
+    """Every field, not only the title: an upstream correction to authors, year or pages fails."""
+    live = R.render_one(key, doi, over, R.slim(R.fetch(doi)))
+    cached = R.render_one(key, doi, over, R.load_cache()[doi.lower()])
+    assert live == cached, f"{key}: the registry record changed; review it, then run --refresh"

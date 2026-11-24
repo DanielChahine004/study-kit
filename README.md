@@ -13,6 +13,9 @@ repositories and the thesis hold the same rules and checks:
   `\claim` against the paperstore's annotations;
 - **Overleaf sync** (`studykit.overleaf`): the paper goes to Overleaf without
   its markup and comes back with it;
+- **references** (`studykit.references`): a writeup's `references.bib` generated from
+  `report/references.txt` (key and DOI per line) and the DOIs' doi.org records, cached, so an
+  invented reference cannot enter it and a DOI that names another paper fails on its key;
 - **tests** (`studykit.testing`): the checks above, plus a clean build, venue
   limits, abbreviations spelled out at first use and units joined by a thin
   space.
