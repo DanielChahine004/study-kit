@@ -281,7 +281,14 @@ def _bib_dois(bib):
 
 def aliases(paper):
     """{paperstore key: this paper's key for the same paper}, matched by DOI, for a writeup whose
-    citation keys follow another convention than the store's (johnson2024celeritas, Johnson2024)."""
+    citation keys follow another convention than the store's (johnson2024celeritas, Johnson2024).
+    Where there is no paperstore (CI), the match recorded in report/sources-<paper>.json the last
+    time the sources were written beside one."""
+    if not (STORE / "references.bib").exists():
+        try:
+            return json.loads((ROOT / "report" / f"sources-{paper}.json").read_text(encoding="utf-8")).get("aliases", {})
+        except (OSError, ValueError):
+            return {}
     mine = {d: k for k, d in _bib_dois(pdir(paper) / "references.bib").items()}
     return {sk: mine[d] for sk, d in _bib_dois(STORE / "references.bib").items() if d in mine and mine[d] != sk}
 
@@ -575,6 +582,7 @@ def render_json(paper, fx, us):
         "given_file": f"report/given-{paper}.txt",
         "unclaimed": [{"file": f, "line": line, "sentence": s, "keys": keys} for f, line, s, keys in unclaimed(paper)],
         "problems": problems,
+        "aliases": dict(sorted(aliases(paper).items())),
     }, indent=1, ensure_ascii=False) + "\n"
 
 
